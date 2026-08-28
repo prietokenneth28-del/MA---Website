@@ -110,8 +110,8 @@ const DataEntryWorkspace = ({ showToast, accessToken }) => {
   const [persona, setPersona] = useState('');
   const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
   
-  // Listas cacheadas para los selects
-  const [proyectosList, setProyectosList] = useState(['1. AGUAS BOGOTA', '2. QUORA', '3. GRUAS AGUAS BOGOTA', '4. TERMOZIPA', 'AES SANTA MARIA', 'GRUPO CEMEX TUNJUELITO', 'PLANTA MONDOÑEDO', 'VARIOS CONTRATOS']);
+  // Listas cargadas dinámicamente
+  const [proyectosList, setProyectosList] = useState([]);
   const [personasList, setPersonasList] = useState([]); 
 
   // --- Estados de Imágenes y Workspace ---
@@ -127,23 +127,86 @@ const DataEntryWorkspace = ({ showToast, accessToken }) => {
     vales: [{ consecutivo: '', pesoEntrada: '', pesoSalida: '' }] // Soporte para múltiples vales
   });
 
-  // Simular carga de operarios según el proyecto seleccionado (para desarrollo / fallback)
+  // 1. Cargar proyectos reales cuando cambia el tipo de personal o el token de acceso
   useEffect(() => {
-    if (!proyecto) {
-      setPersonasList([]);
-      return;
-    }
-    // Lógica para filtrar o mapear personas de forma rápida en demo
-    const cleanedProj = proyecto.replace(/^\d+\.\s*/, '');
-    if (cleanedProj.includes('AGUAS BOGOTA')) {
-      setPersonasList(['CARLOS RODRIGUEZ', 'BRAYAN CASTRO']);
-    } else if (cleanedProj.includes('QUORA')) {
-      setPersonasList(['JOSE GOMEZ']);
-    } else {
-      setPersonasList(['OPERARIO PRUEBA']);
-    }
+    const fetchProjects = async () => {
+      if (!accessToken) {
+        // Fallback de demostración
+        setProyectosList(
+          tipo === 'CONDUCTORES'
+            ? ['1. AGUAS BOGOTA', '2. QUORA', '3. GRUAS AGUAS BOGOTA', '4. TERMOZIPA', '5. NUEVOS']
+            : ['AES SANTA MARIA', 'AGUAS BOGOTA', 'GRUPO CEMEX TUNJUELITO', 'PLANTA MONDOÑEDO', 'TERMOZIPA', 'VARIOS CONTRATOS', 'Z. NUEVOS']
+        );
+        return;
+      }
+
+      setIsLoadingImages(true);
+      try {
+        const client = getGraphClient(accessToken);
+        const basePath = BASE_PATHS[tipo]; // e.g. "1. MAQUINAS AMARILLAS/CONDUCTORES"
+        const response = await client.api(`/me/drive/root:/${basePath}:/children`).get();
+        
+        const projects = (response.value || [])
+          .filter(item => item.folder)
+          .map(item => item.name);
+        
+        setProyectosList(projects);
+      } catch (error) {
+        console.error("Error cargando proyectos desde OneDrive:", error);
+        showToast("Error al cargar los proyectos desde OneDrive", "error");
+      } finally {
+        setIsLoadingImages(false);
+      }
+    };
+
+    fetchProjects();
+  }, [tipo, accessToken]);
+
+  // 2. Cargar conductores/operadores reales cuando cambia el proyecto seleccionado o el token
+  useEffect(() => {
+    const fetchWorkers = async () => {
+      if (!proyecto) {
+        setPersonasList([]);
+        return;
+      }
+
+      if (!accessToken) {
+        // Fallback de demostración
+        const cleanedProj = proyecto.replace(/^\d+\.\s*/, '');
+        if (cleanedProj.includes('AGUAS BOGOTA')) {
+          setPersonasList(['CARLOS RODRIGUEZ', 'BRAYAN CASTRO']);
+        } else if (cleanedProj.includes('QUORA')) {
+          setPersonasList(['JOSE GOMEZ']);
+        } else {
+          setPersonasList(['OPERARIO PRUEBA']);
+        }
+        return;
+      }
+
+      setIsLoadingImages(true);
+      try {
+        const client = getGraphClient(accessToken);
+        const basePath = BASE_PATHS[tipo];
+        const projectPath = `${basePath}/${proyecto}`;
+        const response = await client.api(`/me/drive/root:/${projectPath}:/children`).get();
+        
+        const workers = (response.value || [])
+          .filter(item => item.folder)
+          .map(item => item.name);
+        
+        setPersonasList(workers);
+      } catch (error) {
+        console.error("Error cargando trabajadores desde OneDrive:", error);
+        showToast("Error al cargar la lista de trabajadores", "error");
+        setPersonasList([]);
+      } finally {
+        setIsLoadingImages(false);
+      }
+    };
+
+    fetchWorkers();
     setPersona('');
-  }, [proyecto]);
+  }, [proyecto, accessToken, tipo]);
 
   // --- Funciones MS Graph ---
   const fetchImagesFromOneDrive = async () => {

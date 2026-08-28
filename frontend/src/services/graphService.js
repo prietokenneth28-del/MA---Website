@@ -65,7 +65,7 @@ export const createFolderStructureOneDrive = async (accessToken, role, project, 
     // 1. Crear carpeta del trabajador si no existe
     await client.api(`/me/drive/root:/${targetFolderPath}:`).patch({
       folder: {},
-      "@microsoft.graph.conflictBehavior": "skip"
+      "@microsoft.graph.conflictBehavior": "fail"
     });
 
     // 2. Crear carpetas de meses
@@ -79,7 +79,7 @@ export const createFolderStructureOneDrive = async (accessToken, role, project, 
       // Crear carpeta del mes
       await client.api(`/me/drive/root:/${monthPath}:`).patch({
         folder: {},
-        "@microsoft.graph.conflictBehavior": "skip"
+        "@microsoft.graph.conflictBehavior": "fail"
       });
 
       // Crear subcarpetas para cada día del mes

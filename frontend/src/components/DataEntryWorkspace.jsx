@@ -118,6 +118,9 @@ const DataEntryWorkspace = ({ showToast, accessToken }) => {
   const [availableImages, setAvailableImages] = useState([]);
   const [isLoadingImages, setIsLoadingImages] = useState(false);
   const [selectedImages, setSelectedImages] = useState([]); // Arreglo de objetos {id, url, name}
+
+  // Loading separado para las listas de Proyectos/Trabajadores (evita pisar el spinner de "Buscar Archivos")
+  const [isLoadingLists, setIsLoadingLists] = useState(false);
   
   // --- Estados del Formulario ---
   const [formData, setFormData] = useState({
@@ -140,7 +143,7 @@ const DataEntryWorkspace = ({ showToast, accessToken }) => {
         return;
       }
 
-      setIsLoadingImages(true);
+      setIsLoadingLists(true);
       try {
         const client = getGraphClient(accessToken);
         const basePath = BASE_PATHS[tipo]; // e.g. "1. MAQUINAS AMARILLAS/CONDUCTORES"
@@ -155,7 +158,7 @@ const DataEntryWorkspace = ({ showToast, accessToken }) => {
         console.error("Error cargando proyectos desde OneDrive:", error);
         showToast("Error al cargar los proyectos desde OneDrive", "error");
       } finally {
-        setIsLoadingImages(false);
+        setIsLoadingLists(false);
       }
     };
 
@@ -183,7 +186,7 @@ const DataEntryWorkspace = ({ showToast, accessToken }) => {
         return;
       }
 
-      setIsLoadingImages(true);
+      setIsLoadingLists(true);
       try {
         const client = getGraphClient(accessToken);
         const basePath = BASE_PATHS[tipo];
@@ -200,7 +203,7 @@ const DataEntryWorkspace = ({ showToast, accessToken }) => {
         showToast("Error al cargar la lista de trabajadores", "error");
         setPersonasList([]);
       } finally {
-        setIsLoadingImages(false);
+        setIsLoadingLists(false);
       }
     };
 
@@ -314,16 +317,32 @@ const DataEntryWorkspace = ({ showToast, accessToken }) => {
             </select>
           </div>
           <div className="flex-1 min-w-[150px]">
-            <label className="block text-xs font-semibold text-slate-500 mb-1">Proyecto</label>
-            <select value={proyecto} onChange={(e) => setProyecto(e.target.value)} className="w-full text-sm border-slate-300 rounded-lg focus:ring-yellow-500 focus:border-yellow-500">
-              <option value="">Seleccione...</option>
+            <label className="block text-xs font-semibold text-slate-500 mb-1 flex items-center gap-1">
+              Proyecto
+              {isLoadingLists && <Loader2 className="w-3 h-3 animate-spin text-slate-400" />}
+            </label>
+            <select 
+              value={proyecto} 
+              onChange={(e) => setProyecto(e.target.value)} 
+              disabled={isLoadingLists}
+              className="w-full text-sm border-slate-300 rounded-lg focus:ring-yellow-500 focus:border-yellow-500 disabled:bg-slate-100"
+            >
+              <option value="">{isLoadingLists ? 'Cargando...' : 'Seleccione...'}</option>
               {proyectosList.map(p => <option key={p} value={p}>{p}</option>)}
             </select>
           </div>
           <div className="flex-1 min-w-[150px]">
-            <label className="block text-xs font-semibold text-slate-500 mb-1">Trabajador</label>
-            <select value={persona} onChange={(e) => setPersona(e.target.value)} disabled={!proyecto} className="w-full text-sm border-slate-300 rounded-lg focus:ring-yellow-500 focus:border-yellow-500 disabled:bg-slate-100">
-              <option value="">Seleccione...</option>
+            <label className="block text-xs font-semibold text-slate-500 mb-1 flex items-center gap-1">
+              Trabajador
+              {isLoadingLists && proyecto && <Loader2 className="w-3 h-3 animate-spin text-slate-400" />}
+            </label>
+            <select 
+              value={persona} 
+              onChange={(e) => setPersona(e.target.value)} 
+              disabled={!proyecto || isLoadingLists} 
+              className="w-full text-sm border-slate-300 rounded-lg focus:ring-yellow-500 focus:border-yellow-500 disabled:bg-slate-100"
+            >
+              <option value="">{isLoadingLists ? 'Cargando...' : 'Seleccione...'}</option>
               {personasList.map(p => <option key={p} value={p}>{p}</option>)}
             </select>
           </div>
@@ -539,4 +558,3 @@ const DataEntryWorkspace = ({ showToast, accessToken }) => {
 };
 
 export default DataEntryWorkspace;
-

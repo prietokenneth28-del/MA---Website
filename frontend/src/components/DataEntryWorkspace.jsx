@@ -265,7 +265,6 @@ const DataEntryWorkspace = ({ showToast, accessToken }) => {
     try {
       const client = getGraphClient(accessToken);
       const response = await client.api(`/me/drive/root:/${folderPath}:/children`)
-        .select('id,name,file,@microsoft.graph.downloadUrl')
         .get();
 
       // Filtrar por extensiones válidas de imágenes

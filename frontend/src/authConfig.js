@@ -12,9 +12,10 @@ export const msalConfig = {
   }
 };
 
-// Permisos requeridos para Graph API (lectura y escritura en OneDrive)
+// Permisos requeridos para Graph API y forzar el selector de cuentas (Account Picker)
 export const loginRequest = {
-  scopes: ["User.Read", "Files.ReadWrite.All"]
+  scopes: ["User.Read", "Files.ReadWrite.All"],
+  prompt: "select_account" // Fuerza a Microsoft a mostrar la lista de cuentas disponibles
 };
 
 // Comprueba si Azure Client ID está configurado o si estamos en Modo Simulación
@@ -25,4 +26,3 @@ export const isConfiguredAzure = () => {
     import.meta.env.VITE_AZURE_CLIENT_ID !== "00000000-0000-0000-0000-000000000000"
   );
 };
-

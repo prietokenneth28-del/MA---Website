@@ -91,8 +91,27 @@ const ImagePanZoom = ({ src, alt, onRemove }) => {
           transition: isDragging ? 'none' : 'transform 0.1s ease-out'
         }}
       >
-        <img src={src} alt={alt} className="max-w-full max-h-full object-contain pointer-events-none" />
+        <img 
+          src={src} 
+          alt={alt} 
+          className="max-w-full max-h-full object-contain pointer-events-none"
+          referrerPolicy="no-referrer"
+          onError={(e) => {
+            console.error(
+              `[ImagePanZoom] Falló la carga de "${alt}". ` +
+              `Revisa la pestaña Network/Console para ver el código de error (CORS, 401, CSP, etc). URL:`,
+              src
+            );
+          }}
+        />
       </div>
+      
+      {!src && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-white/60 text-xs gap-2">
+          <ImageIcon className="w-8 h-8 opacity-40" />
+          <span>Sin URL de imagen (revisa la consola)</span>
+        </div>
+      )}
       
       {/* Indicador de ayuda */}
       <div className="absolute bottom-2 left-2 text-[10px] text-white/50 bg-black/40 px-2 py-1 rounded pointer-events-none">
@@ -250,13 +269,24 @@ const DataEntryWorkspace = ({ showToast, accessToken }) => {
         .get();
 
       // Filtrar por extensiones válidas de imágenes
-      const images = (response.value || [])
-        .filter(item => item.file && /\.(jpg|jpeg|png)$/i.test(item.name))
-        .map(item => ({
-          id: item.id,
-          name: item.name,
-          url: item['@microsoft.graph.downloadUrl']
-        }));
+      const rawItems = (response.value || [])
+        .filter(item => item.file && /\.(jpg|jpeg|png)$/i.test(item.name));
+
+      // Diagnóstico: detectar items sin downloadUrl (Graph a veces no lo incluye
+      // si el $select se reescribe o si faltan permisos de Files.Read)
+      const missingUrl = rawItems.filter(item => !item['@microsoft.graph.downloadUrl']);
+      if (missingUrl.length > 0) {
+        console.warn(
+          '[DataEntryWorkspace] Estos archivos no trajeron @microsoft.graph.downloadUrl:',
+          missingUrl.map(i => i.name)
+        );
+      }
+
+      const images = rawItems.map(item => ({
+        id: item.id,
+        name: item.name,
+        url: item['@microsoft.graph.downloadUrl'] || null
+      }));
 
       setAvailableImages(images);
       if (images.length === 0) showToast("No se encontraron imágenes en esta fecha", "info");
@@ -379,7 +409,26 @@ const DataEntryWorkspace = ({ showToast, accessToken }) => {
                   onClick={() => toggleImageSelection(img)}
                   className={`relative group cursor-pointer border-2 rounded-lg overflow-hidden transition-all ${isSelected ? 'border-yellow-500 shadow-md' : 'border-transparent hover:border-slate-300'}`}
                 >
-                  <img src={img.url} alt={img.name} className="w-full h-24 object-cover" />
+                  {img.url ? (
+                    <img 
+                      src={img.url} 
+                      alt={img.name} 
+                      className="w-full h-24 object-cover bg-slate-100"
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        console.error(
+                          `[DataEntryWorkspace] Falló la carga de imagen "${img.name}". ` +
+                          `Revisa la pestaña Network/Console para ver el código de error (CORS, 401, CSP, etc). URL:`,
+                          img.url
+                        );
+                        e.target.dataset.broken = 'true';
+                      }}
+                    />
+                  ) : (
+                    <div className="w-full h-24 bg-slate-100 flex items-center justify-center">
+                      <ImageIcon className="w-6 h-6 text-slate-300" />
+                    </div>
+                  )}
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                     <span className="text-white text-xs font-bold">{isSelected ? 'Quitar' : 'Visualizar'}</span>
                   </div>

@@ -48,6 +48,45 @@ const BASE_PATHS = {
 };
 
 /**
+ * Limitador de concurrencia para evitar saturación de peticiones (Rate Limit / HTTP 429) a Microsoft Graph
+ */
+const runWithConcurrency = async (tasks, limit = 8) => {
+  const results = [];
+  const executing = [];
+  for (const task of tasks) {
+    const p = Promise.resolve().then(() => task());
+    results.push(p);
+    if (limit <= tasks.length) {
+      const e = p.then(() => executing.splice(executing.indexOf(e), 1));
+      executing.push(e);
+      if (executing.length >= limit) {
+        await Promise.race(executing);
+      }
+    }
+  }
+  return Promise.all(results);
+};
+
+/**
+ * Crea una carpeta si no existe, usando POST y manejando conflictos 409 de forma segura.
+ */
+const createFolderIfNotExists = async (client, parentPath, folderName) => {
+  try {
+    await client.api(`/me/drive/root:/${parentPath}:/children`).post({
+      name: folderName,
+      folder: {},
+      "@microsoft.graph.conflictBehavior": "fail"
+    });
+  } catch (error) {
+    // Si la carpeta ya existe, el servidor devuelve 409 Conflict. Lo ignoramos de forma segura.
+    if (error.statusCode === 409 || error.code === "nameAlreadyExists") {
+      return;
+    }
+    throw error;
+  }
+};
+
+/**
  * Crea la estructura anual de carpetas (Proyecto -> Nombre -> Meses -> Días) en OneDrive.
  */
 export const createFolderStructureOneDrive = async (accessToken, role, project, personName, year = new Date().getFullYear()) => {
@@ -59,39 +98,43 @@ export const createFolderStructureOneDrive = async (accessToken, role, project, 
 
   const client = getGraphClient(accessToken);
   const basePath = BASE_PATHS[role] || BASE_PATHS.CONDUCTOR;
-  const targetFolderPath = `${basePath}/${project}/${personName}`;
 
   try {
-    // 1. Crear carpeta del trabajador si no existe
-    await client.api(`/me/drive/root:/${targetFolderPath}:`).patch({
-      folder: {},
-      "@microsoft.graph.conflictBehavior": "fail"
-    });
+    // 1. Crear carpeta del proyecto
+    await createFolderIfNotExists(client, basePath, project);
 
-    // 2. Crear carpetas de meses
+    // 2. Crear carpeta del trabajador
+    await createFolderIfNotExists(client, `${basePath}/${project}`, personName);
+
+    // 3. Generar la lista de tareas de creación de carpetas para meses y días
+    const tasks = [];
+
     for (let monthNum = 1; monthNum <= 12; monthNum++) {
       const monthName = MESES[monthNum];
       const monthFolderName = `${String(monthNum).padStart(2, '0')}_${monthName}`;
       const daysInMonth = new Date(year, monthNum, 0).getDate();
+      const monthPath = `${basePath}/${project}/${personName}`;
 
-      const monthPath = `${targetFolderPath}/${monthFolderName}`;
-      
-      // Crear carpeta del mes
-      await client.api(`/me/drive/root:/${monthPath}:`).patch({
-        folder: {},
-        "@microsoft.graph.conflictBehavior": "fail"
-      });
-
-      // Crear subcarpetas para cada día del mes
-      for (let day = 1; day <= daysInMonth; day++) {
-        const dayFolderName = String(day).padStart(2, '0');
-        const dayPath = `${monthPath}/${dayFolderName}`;
+      // Tarea para crear la carpeta del mes
+      tasks.push(async () => {
+        await createFolderIfNotExists(client, monthPath, monthFolderName);
         
-        await client.api(`/me/drive/root:/${dayPath}:`).patch({
-          folder: {},
-          "@microsoft.graph.conflictBehavior": "skip"
-        });
-      }
+        // Crear las carpetas de días para este mes
+        const dayTasks = [];
+        for (let day = 1; day <= daysInMonth; day++) {
+          const dayFolderName = String(day).padStart(2, '0');
+          dayTasks.push(() => 
+            createFolderIfNotExists(client, `${monthPath}/${monthFolderName}`, dayFolderName)
+          );
+        }
+        // Ejecutar los días de este mes en paralelo controlado
+        await runWithConcurrency(dayTasks, 6);
+      });
+    }
+
+    // Ejecutar los meses uno por uno para no saturar al servidor
+    for (const monthTask of tasks) {
+      await monthTask();
     }
 
     return { success: true, mode: "graph" };

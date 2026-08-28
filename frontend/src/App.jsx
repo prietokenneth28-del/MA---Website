@@ -7,6 +7,7 @@ import Toast from './components/Toast';
 import PersonalRegistration from './components/PersonalRegistration';
 import MissingAudit from './components/MissingAudit';
 import ImageEnhancer from './components/ImageEnhancer';
+import DataEntryWorkspace from './components/DataEntryWorkspace';
 
 import { 
   LayoutDashboard, 
@@ -16,7 +17,8 @@ import {
   Menu, 
   ShieldCheck, 
   Info,
-  CheckCircle2
+  CheckCircle2,
+  FileEdit
 } from 'lucide-react';
 
 export const App = () => {
@@ -153,8 +155,8 @@ export const App = () => {
         </header>
 
         {/* Content Body */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-8">
-          <div className="max-w-5xl mx-auto space-y-6">
+        <div className={`flex-1 overflow-y-auto ${activeTab === 'digitacion' ? 'p-0' : 'p-4 md:p-8'} flex flex-col`}>
+          <div className={`${activeTab === 'digitacion' ? 'w-full h-full flex flex-col' : 'max-w-5xl mx-auto space-y-6 w-full'}`}>
 
             {/* TAB: Dashboard */}
             {activeTab === 'dashboard' && (
@@ -163,7 +165,7 @@ export const App = () => {
                   <div className="relative z-10">
                     <h2 className="text-3xl font-black tracking-tight">Bienvenido al Panel de Operaciones</h2>
                     <p className="text-slate-300 text-sm mt-2 max-w-xl">
-                      Gestiona la creación de estructuras de carpetas, auditoría de reportes faltantes y optimización de imágenes en Microsoft OneDrive.
+                      Gestiona la creación de estructuras, auditoría, mejora de imágenes y digitación de reportes diarios.
                     </p>
                   </div>
                   <div className="absolute right-[-20px] bottom-[-20px] opacity-10 pointer-events-none">
@@ -171,7 +173,20 @@ export const App = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                  <div 
+                    onClick={() => setActiveTab('digitacion')}
+                    className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition-all cursor-pointer group hover:-translate-y-1"
+                  >
+                    <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                      <FileEdit className="w-6 h-6" />
+                    </div>
+                    <h3 className="font-bold text-slate-900 text-lg">Digitación</h3>
+                    <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+                      Visualiza reportes y vales simultáneamente para transcribir datos al sistema.
+                    </p>
+                  </div>
+
                   <div 
                     onClick={() => setActiveTab('registro')}
                     className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition-all cursor-pointer group hover:-translate-y-1"
@@ -179,9 +194,9 @@ export const App = () => {
                     <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                       <UserPlus className="w-6 h-6" />
                     </div>
-                    <h3 className="font-bold text-slate-900 text-lg">Alta de Personal</h3>
+                    <h3 className="font-bold text-slate-900 text-lg">Alta Personal</h3>
                     <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-                      Crea la estructura de carpetas anual en OneDrive y genera credenciales con mensaje de WhatsApp Web.
+                      Crea la estructura de carpetas anual en OneDrive.
                     </p>
                   </div>
 
@@ -192,9 +207,9 @@ export const App = () => {
                     <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                       <Search className="w-6 h-6" />
                     </div>
-                    <h3 className="font-bold text-slate-900 text-lg">Auditoría Faltantes</h3>
+                    <h3 className="font-bold text-slate-900 text-lg">Faltantes</h3>
                     <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-                      Escanea días sin reportes subidos a OneDrive y genera reportes formateados en Excel.
+                      Auditoría de días sin reportes subidos.
                     </p>
                   </div>
 
@@ -205,28 +220,22 @@ export const App = () => {
                     <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                       <ImageIcon className="w-6 h-6" />
                     </div>
-                    <h3 className="font-bold text-slate-900 text-lg">Mejora de Imágenes</h3>
+                    <h3 className="font-bold text-slate-900 text-lg">Mejora Imag.</h3>
                     <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-                      Aplica filtros de contraste, claridad y enfoque en el navegador a fotos de horómetros.
+                      Filtros interactivos de claridad y contraste para fotos oscuras.
                     </p>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* TAB: Registro */}
-            {activeTab === 'registro' && (
-              <PersonalRegistration showToast={showToast} accessToken={accessToken} />
-            )}
-
-            {/* TAB: Auditoría Faltantes */}
-            {activeTab === 'faltantes' && (
-              <MissingAudit showToast={showToast} accessToken={accessToken} />
-            )}
-
-            {/* TAB: Mejora de Imágenes */}
-            {activeTab === 'imagenes' && (
-              <ImageEnhancer showToast={showToast} />
+            {activeTab === 'registro' && <PersonalRegistration showToast={showToast} accessToken={accessToken} />}
+            {activeTab === 'faltantes' && <MissingAudit showToast={showToast} accessToken={accessToken} />}
+            {activeTab === 'imagenes' && <ImageEnhancer showToast={showToast} />}
+            
+            {/* NUEVO TAB: Digitación */}
+            {activeTab === 'digitacion' && (
+              <DataEntryWorkspace showToast={showToast} accessToken={accessToken} />
             )}
 
           </div>
@@ -237,4 +246,3 @@ export const App = () => {
 };
 
 export default App;
-

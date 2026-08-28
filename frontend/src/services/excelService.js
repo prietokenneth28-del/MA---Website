@@ -4,10 +4,8 @@ import * as XLSX from 'xlsx';
  * Genera un archivo Excel (.xlsx) a partir de los datos de auditoría de faltantes y fuerza su descarga en el navegador.
  */
 export const downloadAuditExcel = (data, filename = 'reporte_faltantes.xlsx') => {
-  // Crear una nueva hoja de trabajo
   const worksheet = XLSX.utils.json_to_sheet(data);
 
-  // Ajustar anchos de columnas sugeridos
   const colWidths = [
     { wch: 24 }, // Proyecto
     { wch: 30 }, // Nombre Conductor / Operario
@@ -17,12 +15,32 @@ export const downloadAuditExcel = (data, filename = 'reporte_faltantes.xlsx') =>
   ];
   worksheet['!cols'] = colWidths;
 
-  // Crear libro de trabajo
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Faltantes');
 
-  // Guardar/Descargar el archivo
   XLSX.writeFile(workbook, filename);
+};
+
+/**
+ * Crea un buffer de Excel fresco con encabezados y el primer registro.
+ */
+export const createFreshExcelBuffer = (newRowData) => {
+  const headers = ['PROYECTO', 'NOMBRE', 'IDENTIFICACION', 'CELULAR', 'USUARIO', 'CONTRASEÑA'];
+  const data = [
+    headers,
+    [
+      newRowData.proyecto,
+      newRowData.nombre,
+      newRowData.identificacion,
+      newRowData.celular,
+      newRowData.usuario,
+      newRowData.contraseña
+    ]
+  ];
+  const worksheet = XLSX.utils.aoa_to_sheet(data);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Listado');
+  return XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
 };
 
 /**
@@ -34,7 +52,6 @@ export const appendPersonToExcelBuffer = (arrayBuffer, newRowData) => {
     const firstSheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[firstSheetName];
 
-    // Convertir a JSON, añadir fila y reconvertir
     const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
     jsonData.push([
       newRowData.proyecto,
@@ -48,11 +65,9 @@ export const appendPersonToExcelBuffer = (arrayBuffer, newRowData) => {
     const newWorksheet = XLSX.utils.aoa_to_sheet(jsonData);
     workbook.Sheets[firstSheetName] = newWorksheet;
 
-    const updatedBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-    return updatedBuffer;
+    return XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
   } catch (error) {
     console.error("Error procesando Excel en memoria:", error);
     throw error;
   }
 };
-

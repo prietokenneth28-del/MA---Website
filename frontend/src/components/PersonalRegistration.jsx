@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { UserPlus, Copy, Send, CheckCircle2, Loader2, FolderPlus, FileSpreadsheet } from 'lucide-react';
-import { createFolderStructureOneDrive } from '../services/graphService';
+import { UserPlus, Copy, Send, CheckCircle2, Loader2, FolderPlus } from 'lucide-react';
+import { createFolderStructureOneDrive, downloadFileFromOneDrive, uploadFileToOneDrive } from '../services/graphService';
+import { appendPersonToExcelBuffer, createFreshExcelBuffer } from '../services/excelService';
 
 const PROJECT_CONFIG = {
   CONDUCTOR: {
@@ -11,6 +12,11 @@ const PROJECT_CONFIG = {
     label: "Operario",
     projects: ['AES SANTA MARIA', 'AGUAS BOGOTA', 'GRUPO CEMEX TUNJUELITO', 'PLANTA MONDOÑEDO', 'TERMOZIPA', 'VARIOS CONTRATOS', 'Z. NUEVOS']
   }
+};
+
+const EXCEL_PATHS = {
+  CONDUCTOR: "MAQUINAS AMARILLAS/CONDUCTORES/REPORTES/LISTADO DE CONDUCTORES.xlsx",
+  OPERARIO: "MAQUINAS AMARILLAS/OPERADORES/1. REPORTES/LISTADO DE OPERARIOS.xlsx"
 };
 
 export const PersonalRegistration = ({ showToast, accessToken }) => {
@@ -65,10 +71,16 @@ export const PersonalRegistration = ({ showToast, accessToken }) => {
       `Por favor guarda esta información.`;
 
     const encodedMessage = encodeURIComponent(message);
-    const whatsappUrl = `https://web.whatsapp.com/send?phone=${phoneWithCountry}&text=${encodedMessage}`;
+    const whatsappUrl = `https://web.whatsapp.com/send?phone={phoneWithCountry}&text={encodedMessage}`;
     
-    window.open(whatsappUrl, '_blank');
-    showToast(`WhatsApp Web abierto para ${firstName}`, 'success');
+    // Si estamos en un dispositivo móvil abrimos el protocolo de whatsapp, de lo contrario whatsapp web
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const finalUrl = isMobile 
+      ? `https://api.whatsapp.com/send?phone=${phoneWithCountry}&text=${encodedMessage}`
+      : `https://web.whatsapp.com/send?phone=${phoneWithCountry}&text=${encodedMessage}`;
+
+    window.open(finalUrl, '_blank');
+    showToast(`WhatsApp abierto para ${firstName}`, 'success');
   };
 
   const handleSubmit = async (e) => {
@@ -89,18 +101,48 @@ export const PersonalRegistration = ({ showToast, accessToken }) => {
       // 1. Crear carpetas de meses y días en OneDrive vía Graph API
       await createFolderStructureOneDrive(accessToken, role, project, fullName.trim().toUpperCase());
 
-      // 2. Copiar automáticamente datos al portapapeles
+      // 2. Actualizar listado maestro en Excel de OneDrive (solo en producción con token real)
+      if (accessToken) {
+        const excelPath = EXCEL_PATHS[role];
+        showToast('Actualizando base de datos Excel en la nube...', 'info');
+
+        const rowData = {
+          proyecto: project,
+          nombre: fullName.trim().toUpperCase(),
+          identificacion: idNumber,
+          celular: phone,
+          usuario: creds.user,
+          contraseña: creds.pass
+        };
+
+        let updatedBuffer;
+        try {
+          // Intentar descargar el archivo maestro actual
+          const fileArrayBuffer = await downloadFileFromOneDrive(accessToken, excelPath);
+          // Insertar fila en memoria
+          updatedBuffer = appendPersonToExcelBuffer(fileArrayBuffer, rowData);
+        } catch (downloadErr) {
+          // Si el archivo no existe aún, se genera uno nuevo con encabezados
+          console.warn("Base de datos no encontrada. Creando archivo maestro...", downloadErr);
+          updatedBuffer = createFreshExcelBuffer(rowData);
+        }
+
+        // Subir / guardar el archivo actualizado en OneDrive
+        await uploadFileToOneDrive(accessToken, excelPath, updatedBuffer);
+      }
+
+      // 3. Copiar automáticamente datos al portapapeles
       const fullCopyData = `Nombre: ${fullName}\nID: ${idNumber}\nCelular: ${phone}\nUsuario: ${creds.user}\nContraseña: ${creds.pass}`;
       navigator.clipboard.writeText(fullCopyData);
 
-      showToast(`¡Alta completada para ${fullName}! Carpetas creadas y credenciales copiadas.`, 'success');
+      showToast(`¡Alta completada para ${fullName}! Base de datos Excel y carpetas sincronizadas en OneDrive.`, 'success');
 
-      // 3. Abrir WhatsApp Web con mensaje listo
+      // 4. Abrir canal de WhatsApp con mensaje listo
       openWhatsApp(creds.firstName, phone, creds.user, creds.pass);
 
     } catch (error) {
       console.error(error);
-      showToast('Ocurrió un error al procesar el alta en OneDrive.', 'error');
+      showToast('Ocurrió un error al procesar la alta en OneDrive.', 'error');
     } finally {
       setLoading(false);
     }
@@ -114,7 +156,7 @@ export const PersonalRegistration = ({ showToast, accessToken }) => {
             <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-2.5">
               <UserPlus className="w-7 h-7 text-yellow-500" /> Alta de Personal
             </h2>
-            <p className="text-slate-500 text-sm mt-1">Crea la estructura de carpetas anual en OneDrive y genera credenciales.</p>
+            <p className="text-slate-500 text-sm mt-1">Crea la estructura de carpetas anual y registra los datos en el Excel maestro de OneDrive.</p>
           </div>
         </div>
 
@@ -205,12 +247,12 @@ export const PersonalRegistration = ({ showToast, accessToken }) => {
               {loading ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin text-yellow-400" />
-                  <span>Creando Estructura en OneDrive...</span>
+                  <span>Sincronizando con OneDrive...</span>
                 </>
               ) : (
                 <>
                   <FolderPlus className="w-5 h-5 text-yellow-400" />
-                  <span>Registrar y Crear Carpetas en OneDrive</span>
+                  <span>Registrar y Sincronizar en OneDrive</span>
                 </>
               )}
             </button>
@@ -271,4 +313,3 @@ export const PersonalRegistration = ({ showToast, accessToken }) => {
 };
 
 export default PersonalRegistration;
-

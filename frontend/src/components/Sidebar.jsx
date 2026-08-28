@@ -1,9 +1,10 @@
 import React from 'react';
-import { LayoutDashboard, UserPlus, Search, Image as ImageIcon, X, LogOut, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, UserPlus, Search, Image as ImageIcon, X, LogOut, ShieldCheck, FileEdit } from 'lucide-react';
 
 export const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobileMenuOpen, userProfile, onLogout, isDemoMode }) => {
   const menuItems = [
     { id: 'dashboard', label: 'Panel Principal', icon: LayoutDashboard },
+    { id: 'digitacion', label: 'Digitación de Datos', icon: FileEdit },
     { id: 'registro', label: 'Alta de Personal', icon: UserPlus },
     { id: 'faltantes', label: 'Auditoría Faltantes', icon: Search },
     { id: 'imagenes', label: 'Mejorar Imágenes', icon: ImageIcon },
@@ -98,4 +99,3 @@ export const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobile
 };
 
 export default Sidebar;
-

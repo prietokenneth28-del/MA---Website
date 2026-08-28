@@ -43,8 +43,8 @@ const MESES = {
 };
 
 const BASE_PATHS = {
-  CONDUCTOR: "1. MAQUINAS AMARILLAS/CONDUCTORES",
-  OPERARIO: "1. MAQUINAS AMARILLAS/OPERADORES"
+  CONDUCTOR: "MAQUINAS AMARILLAS/CONDUCTORES",
+  OPERARIO: "MAQUINAS AMARILLAS/OPERADORES"
 };
 
 /**
@@ -82,6 +82,37 @@ const createFolderIfNotExists = async (client, parentPath, folderName) => {
     if (error.statusCode === 409 || error.code === "nameAlreadyExists") {
       return;
     }
+    throw error;
+  }
+};
+
+/**
+ * Descarga un archivo de OneDrive como ArrayBuffer.
+ */
+export const downloadFileFromOneDrive = async (accessToken, filePath) => {
+  const client = getGraphClient(accessToken);
+  try {
+    const response = await client.api(`/me/drive/root:/${filePath}:/content`)
+      .responseType('arraybuffer')
+      .get();
+    return response;
+  } catch (error) {
+    console.warn(`Error descargando archivo ${filePath}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Sube o sobrescribe un archivo en OneDrive (ArrayBuffer o Blob).
+ */
+export const uploadFileToOneDrive = async (accessToken, filePath, content) => {
+  const client = getGraphClient(accessToken);
+  try {
+    const response = await client.api(`/me/drive/root:/${filePath}:/content`)
+      .put(content);
+    return response;
+  } catch (error) {
+    console.error(`Error subiendo archivo a ${filePath}:`, error);
     throw error;
   }
 };

@@ -12,7 +12,9 @@ import {
   LayoutGrid,
   ChevronRight,
   Maximize,
-  FileEdit
+  FileEdit,
+  RotateCw,
+  RotateCcw
 } from 'lucide-react';
 
 const MESES = {
@@ -29,10 +31,59 @@ const BASE_PATHS = {
 // --- Subcomponente: Visor de Imagen con Zoom y Pan ---
 const ImagePanZoom = ({ src, alt, onRemove }) => {
   const [scale, setScale] = useState(1);
+  const [rotation, setRotation] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const containerRef = useRef(null);
+
+  // --- Estado para exportar la imagen (Drag & Drop hacia Sinco) ---
+  // Mientras se mantiene presionada la tecla Shift, la imagen se vuelve arrastrable
+  // (draggable nativo del navegador) en lugar de usar el pan del contenedor.
+  const [isShiftHeld, setIsShiftHeld] = useState(false);
+  const [isFetchingBlob, setIsFetchingBlob] = useState(false);
+  const blobRef = useRef(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => { if (e.key === 'Shift') setIsShiftHeld(true); };
+    const handleKeyUp = (e) => { if (e.key === 'Shift') setIsShiftHeld(false); };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+
+  // Pre-descarga el Blob de la imagen en cuanto se activa el modo arrastre (Shift),
+  // para tenerlo listo de forma síncrona cuando el usuario suelte el archivo sobre Sinco.
+  useEffect(() => {
+    if (isShiftHeld && src && !blobRef.current && !isFetchingBlob) {
+      setIsFetchingBlob(true);
+      fetch(src)
+        .then(res => res.blob())
+        .then(blob => { blobRef.current = blob; })
+        .catch(err => console.error('[ImagePanZoom] No se pudo pre-cargar la imagen para arrastrar:', err))
+        .finally(() => setIsFetchingBlob(false));
+    }
+  }, [isShiftHeld, src]);
+
+  // Si cambia la imagen mostrada, invalidamos el blob cacheado de la anterior
+  useEffect(() => {
+    blobRef.current = null;
+  }, [src]);
+
+  const handleImageDragStart = (e) => {
+    if (!blobRef.current) {
+      // Todavía no terminó de descargarse el archivo; evitamos iniciar un drag vacío
+      e.preventDefault();
+      return;
+    }
+    const fileName = (alt && /\.(jpg|jpeg|png)$/i.test(alt)) ? alt : `${alt || 'imagen'}.jpg`;
+    const file = new File([blobRef.current], fileName, { type: blobRef.current.type || 'image/jpeg' });
+    e.dataTransfer.items.add(file);
+    e.dataTransfer.effectAllowed = 'copy';
+  };
 
   const handleWheel = (e) => {
     if (e.ctrlKey) {
@@ -43,6 +94,9 @@ const ImagePanZoom = ({ src, alt, onRemove }) => {
   };
 
   const handleMouseDown = (e) => {
+    // Con Shift presionado dejamos que el navegador gestione el drag nativo de la imagen
+    // en vez de iniciar el paneo del contenedor.
+    if (isShiftHeld) return;
     setIsDragging(true);
     setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y });
   };
@@ -79,7 +133,11 @@ const ImagePanZoom = ({ src, alt, onRemove }) => {
       <div className="absolute top-2 right-2 z-10 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 p-1 rounded-lg">
         <button onClick={() => setScale(s => Math.min(s + 0.2, 4))} className="p-1 text-white hover:bg-white/20 rounded"><ZoomIn size={16}/></button>
         <button onClick={() => setScale(s => Math.max(s - 0.2, 0.5))} className="p-1 text-white hover:bg-white/20 rounded"><ZoomOut size={16}/></button>
-        <button onClick={() => { setScale(1); setPosition({x:0, y:0}); }} className="p-1 text-white hover:bg-white/20 rounded"><Maximize size={16}/></button>
+        <div className="w-px bg-white/20 mx-1"></div>
+        <button onClick={() => setRotation(r => (r - 90 + 360) % 360)} className="p-1 text-white hover:bg-white/20 rounded"><RotateCcw size={16}/></button>
+        <button onClick={() => setRotation(r => (r + 90) % 360)} className="p-1 text-white hover:bg-white/20 rounded"><RotateCw size={16}/></button>
+        <div className="w-px bg-white/20 mx-1"></div>
+        <button onClick={() => { setScale(1); setPosition({x:0, y:0}); setRotation(0); }} className="p-1 text-white hover:bg-white/20 rounded"><Maximize size={16}/></button>
         <div className="w-px bg-white/20 mx-1"></div>
         <button onClick={onRemove} className="p-1 text-rose-400 hover:bg-rose-500/20 rounded"><X size={16}/></button>
       </div>
@@ -87,14 +145,16 @@ const ImagePanZoom = ({ src, alt, onRemove }) => {
       <div 
         className="w-full h-full flex items-center justify-center origin-center"
         style={{
-          transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+          transform: `translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${rotation}deg)`,
           transition: isDragging ? 'none' : 'transform 0.1s ease-out'
         }}
       >
         <img 
           src={src} 
           alt={alt} 
-          className="max-w-full max-h-full object-contain pointer-events-none"
+          draggable={isShiftHeld}
+          onDragStart={handleImageDragStart}
+          className={`max-w-full max-h-full object-contain ${isShiftHeld ? 'cursor-grab' : 'pointer-events-none'}`}
           referrerPolicy="no-referrer"
           onError={(e) => {
             console.error(
@@ -115,7 +175,8 @@ const ImagePanZoom = ({ src, alt, onRemove }) => {
       
       {/* Indicador de ayuda */}
       <div className="absolute bottom-2 left-2 text-[10px] text-white/50 bg-black/40 px-2 py-1 rounded pointer-events-none">
-        Ctrl + Scroll para Zoom | Arrastrar para mover
+        Ctrl + Scroll para Zoom | Arrastrar para mover | Shift + Arrastrar para subir a Sinco
+        {isFetchingBlob && ' (preparando archivo...)'}
       </div>
     </div>
   );

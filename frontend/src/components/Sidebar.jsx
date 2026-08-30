@@ -21,7 +21,7 @@ export const Sidebar = ({ activeTab, setActiveTab, isMobileMenuOpen, setIsMobile
       )}
 
       {/* Sidebar Container */}
-      <aside className={`fixed inset-y-0 left-0 w-72 bg-slate-900 text-white z-50 transform transition-transform duration-300 ease-in-out flex flex-col shadow-2xl border-r border-slate-800 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside className={`fixed md:static inset-y-0 left-0 w-72 bg-slate-900 text-white z-50 transform transition-transform duration-300 ease-in-out flex flex-col shadow-2xl border-r border-slate-800 flex-shrink-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
         <div className="p-6 flex items-center justify-between border-b border-slate-800">
           <div className="flex items-center space-x-3">
             <div className="w-9 h-9 bg-yellow-500 rounded-xl flex items-center justify-center text-slate-900 font-bold shadow-md shadow-yellow-500/20">

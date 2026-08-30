@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import { getGraphClient } from '../services/graphService';
 import { 
   FolderSearch, 
@@ -26,6 +27,95 @@ const MESES = {
 const BASE_PATHS = {
   CONDUCTORES: "1. MAQUINAS AMARILLAS/CONDUCTORES",
   OPERADORES: "1. MAQUINAS AMARILLAS/OPERADORES"
+};
+
+// --- Tipos de Pago disponibles para el registro diario ---
+const TIPOS_PAGO = ['PESO', 'VIAJE', 'DISPONIBILIDAD', 'DISPONIBLE', 'NO PROGRAMADO'];
+
+// --- Configuración del Excel maestro (acumulativo) en OneDrive ---
+// Todos los registros de digitación (Conductores y Operadores) se guardan como filas
+// nuevas en este único archivo, dentro de la carpeta raíz de Máquinas Amarillas.
+const MASTER_EXCEL_PATH = "1. MAQUINAS AMARILLAS/Registros_Digitacion.xlsx";
+const encodedMasterPath = MASTER_EXCEL_PATH.split('/').map(encodeURIComponent).join('/');
+const GRAPH_ENDPOINT = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodedMasterPath}:/content`;
+
+const MASTER_HEADERS = [
+  'Fecha Registro', 'Tipo', 'Proyecto', 'Trabajador', 'Fecha Reporte',
+  'Consecutivo RDO', 'Horometro Inicial', 'Horometro Final', 'Tipo Pago',
+  'Consecutivo Vale', 'Peso Entrada', 'Peso Salida'
+];
+
+// Construye una fila (arreglo) por cada vale del reporte, replicando los campos
+// generales del registro diario. Si no hay vales con datos, igual se genera una
+// fila única para no perder el registro del día.
+const buildMasterRows = ({ tipo, proyecto, persona, fecha, formData }) => {
+  const timestamp = new Date().toISOString();
+  const baseFields = [
+    timestamp, tipo, proyecto, persona, fecha,
+    formData.consecutivoRegistro, formData.horometroInicial, formData.horometroFinal, formData.tipoPago
+  ];
+
+  const vales = formData.vales && formData.vales.length > 0
+    ? formData.vales
+    : [{ consecutivo: '', pesoEntrada: '', pesoSalida: '' }];
+
+  return vales.map(v => [...baseFields, v.consecutivo, v.pesoEntrada, v.pesoSalida]);
+};
+
+// Descarga el Excel maestro existente desde OneDrive y lo agrega las filas nuevas.
+// Si el archivo aún no existe (404), crea uno nuevo con encabezados.
+const appendRowsToOneDriveMaster = async (accessToken, newRows) => {
+  const headers = { Authorization: `Bearer ${accessToken}` };
+
+  const getResponse = await fetch(GRAPH_ENDPOINT, { headers });
+
+  let sheetRows;
+  if (getResponse.status === 404) {
+    // El archivo no existe todavía: se crea con encabezados + las filas nuevas
+    sheetRows = [MASTER_HEADERS, ...newRows];
+  } else if (getResponse.ok) {
+    const buffer = await getResponse.arrayBuffer();
+    const workbook = XLSX.read(buffer, { type: 'array' });
+    const firstSheetName = workbook.SheetNames[0];
+    const existingSheet = workbook.Sheets[firstSheetName];
+    const existingRows = XLSX.utils.sheet_to_json(existingSheet, { header: 1, defval: '' });
+    // Si por algún motivo el archivo existente no tiene encabezados, los añadimos
+    const hasHeaders = existingRows.length > 0 && existingRows[0][0] === MASTER_HEADERS[0];
+    sheetRows = hasHeaders
+      ? [...existingRows, ...newRows]
+      : [MASTER_HEADERS, ...existingRows, ...newRows];
+  } else {
+    const errorText = await getResponse.text().catch(() => '');
+    throw new Error(`No se pudo leer el Excel maestro (HTTP ${getResponse.status}): ${errorText}`);
+  }
+
+  const newSheet = XLSX.utils.aoa_to_sheet(sheetRows);
+  const newWorkbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(newWorkbook, newSheet, 'Registros');
+  const outBuffer = XLSX.write(newWorkbook, { type: 'array', bookType: 'xlsx' });
+
+  const putResponse = await fetch(GRAPH_ENDPOINT, {
+    method: 'PUT',
+    headers: {
+      ...headers,
+      'Content-Type': 'application/octet-stream'
+    },
+    body: outBuffer
+  });
+
+  if (!putResponse.ok) {
+    const errorText = await putResponse.text().catch(() => '');
+    throw new Error(`No se pudo guardar el Excel maestro (HTTP ${putResponse.status}): ${errorText}`);
+  }
+};
+
+// Modo demo (sin accessToken): genera y descarga un Excel local con las filas del registro,
+// para que el botón siga siendo funcional en pruebas locales sin OneDrive.
+const downloadRowsLocally = (newRows, fileLabel) => {
+  const sheet = XLSX.utils.aoa_to_sheet([MASTER_HEADERS, ...newRows]);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, sheet, 'Registros');
+  XLSX.writeFile(workbook, `Registro_${fileLabel}.xlsx`);
 };
 
 // --- Subcomponente: Visor de Imagen con Zoom y Pan ---
@@ -207,8 +297,12 @@ const DataEntryWorkspace = ({ showToast, accessToken }) => {
     consecutivoRegistro: '',
     horometroInicial: '',
     horometroFinal: '',
+    tipoPago: '',
     vales: [{ consecutivo: '', pesoEntrada: '', pesoSalida: '' }] // Soporte para múltiples vales
   });
+
+  // Estado de guardado del reporte (Excel maestro en OneDrive)
+  const [isSaving, setIsSaving] = useState(false);
 
   // 1. Cargar proyectos reales cuando cambia el tipo de personal o el token de acceso
   useEffect(() => {
@@ -388,10 +482,50 @@ const DataEntryWorkspace = ({ showToast, accessToken }) => {
     });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log("Datos a guardar:", formData);
-    showToast("Datos guardados exitosamente (Simulación)", "success");
+
+    if (!proyecto || !persona || !fecha) {
+      showToast("Selecciona Proyecto, Trabajador y Fecha antes de guardar", "warning");
+      return;
+    }
+    if (!formData.consecutivoRegistro) {
+      showToast("Ingresa el Consecutivo RDO antes de guardar", "warning");
+      return;
+    }
+    if (!formData.tipoPago) {
+      showToast("Selecciona el Tipo de Pago antes de guardar", "warning");
+      return;
+    }
+
+    const newRows = buildMasterRows({ tipo, proyecto, persona, fecha, formData });
+
+    setIsSaving(true);
+    try {
+      if (accessToken) {
+        await appendRowsToOneDriveMaster(accessToken, newRows);
+        showToast("Reporte guardado en el Excel maestro de OneDrive", "success");
+      } else {
+        // MODO DEMO: no hay sesión real de OneDrive, se descarga localmente
+        downloadRowsLocally(newRows, `${persona}_${fecha}`);
+        showToast("Sin conexión a OneDrive: se descargó el Excel localmente (Modo Demo)", "info");
+      }
+
+      // Se limpia el formulario para digitar el siguiente registro,
+      // manteniendo la búsqueda (Proyecto/Trabajador/Fecha) seleccionada.
+      setFormData({
+        consecutivoRegistro: '',
+        horometroInicial: '',
+        horometroFinal: '',
+        tipoPago: '',
+        vales: [{ consecutivo: '', pesoEntrada: '', pesoSalida: '' }]
+      });
+    } catch (error) {
+      console.error("Error guardando el reporte en el Excel maestro:", error);
+      showToast("Error al guardar el reporte en OneDrive", "error");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -562,6 +696,18 @@ const DataEntryWorkspace = ({ showToast, accessToken }) => {
                   />
                 </div>
                 
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Tipo de Pago</label>
+                  <select
+                    value={formData.tipoPago}
+                    onChange={e => setFormData({...formData, tipoPago: e.target.value})}
+                    className="w-full text-sm border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-slate-50"
+                  >
+                    <option value="">Seleccione...</option>
+                    {TIPOS_PAGO.map(tp => <option key={tp} value={tp}>{tp}</option>)}
+                  </select>
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Horómetro Inicial</label>
@@ -653,10 +799,11 @@ const DataEntryWorkspace = ({ showToast, accessToken }) => {
             <button 
               form="dataEntryForm"
               type="submit" 
-              className="w-full flex justify-center items-center space-x-2 bg-yellow-500 hover:bg-yellow-600 text-slate-900 py-3 rounded-xl font-black transition-colors shadow-md"
+              disabled={isSaving}
+              className="w-full flex justify-center items-center space-x-2 bg-yellow-500 hover:bg-yellow-600 text-slate-900 py-3 rounded-xl font-black transition-colors shadow-md disabled:opacity-60"
             >
-              <Save className="w-5 h-5" />
-              <span>Guardar Reporte</span>
+              {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+              <span>{isSaving ? 'Guardando...' : 'Guardar Reporte'}</span>
             </button>
           </div>
         </div>

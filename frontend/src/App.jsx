@@ -141,17 +141,28 @@ export const App = () => {
       />
 
       <main className="flex-1 flex flex-col overflow-hidden bg-slate-50">
-        {/* Mobile Header */}
-        <header className="bg-white border-b border-slate-200 p-4 flex items-center justify-between md:hidden shadow-xs">
-          <div className="flex items-center space-x-2">
+        {/* Top Header con Botón de Menú para abrir Sidebar */}
+        <header className="bg-white border-b border-slate-200 p-3.5 px-4 flex items-center justify-between shadow-xs shrink-0">
+          <div className="flex items-center space-x-3">
+            <button 
+              onClick={() => setIsMobileMenuOpen(true)} 
+              className="text-slate-700 hover:text-slate-900 hover:bg-slate-100 p-2 rounded-xl transition-colors cursor-pointer"
+              title="Abrir menú"
+            >
+              <Menu className="w-6 h-6" />
+            </button>
             <div className="w-7 h-7 bg-yellow-500 rounded-lg text-slate-950 flex items-center justify-center font-bold">
               <LayoutDashboard className="w-4 h-4" />
             </div>
-            <h1 className="font-bold text-slate-900 text-base">SisOperaciones</h1>
+            <h1 className="font-bold text-slate-900 text-base tracking-tight">Sis<span className="text-yellow-500">Operaciones</span></h1>
           </div>
-          <button onClick={() => setIsMobileMenuOpen(true)} className="text-slate-600 hover:text-slate-900 p-1">
-            <Menu className="w-6 h-6" />
-          </button>
+          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider hidden sm:block">
+            {activeTab === 'dashboard' && 'Panel Principal'}
+            {activeTab === 'digitacion' && 'Digitación de Datos'}
+            {activeTab === 'registro' && 'Alta de Personal'}
+            {activeTab === 'faltantes' && 'Auditoría de Faltantes'}
+            {activeTab === 'imagenes' && 'Mejora de Imágenes'}
+          </div>
         </header>
 
         {/* Content Body */}

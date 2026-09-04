@@ -311,7 +311,7 @@ const DataEntryWorkspace = ({ showToast, accessToken }) => {
         // Fallback de demostración
         setProyectosList(
           tipo === 'CONDUCTORES'
-            ? ['1. AGUAS BOGOTA', '2. QUORA', '3. GRUAS AGUAS BOGOTA', '4. TERMOZIPA', '5. NUEVOS']
+            ? ['1. AGUAS BOGOTA', '2. QUORA', '3. GRUAS AGUAS BOGOTA', '4. TERMOZIPA', '6. NUEVOS']
             : ['AES SANTA MARIA', 'AGUAS BOGOTA', 'GRUPO CEMEX TUNJUELITO', 'PLANTA MONDOÑEDO', 'TERMOZIPA', 'VARIOS CONTRATOS', 'Z. NUEVOS']
         );
         return;
